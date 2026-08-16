@@ -1,16 +1,15 @@
 // ============================================================
-// app.js — Serveur Express pour FALIKI ZA DIMA / SIGA
-// Base de données SQLite, authentification par session,
-// routes API, serveur statique et fallback SPA.
+// server.js — Serveur Express pour FALIKI ZA DIMA / SIGA
+// Compatible Render, détection automatique de l'index.html
 // ============================================================
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const session = require('express-session');
 const sqlite3 = require('sqlite3').verbose();
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,14 +18,14 @@ const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'data.db');
 const db = new sqlite3.Database(DB_FILE, (err) => {
   if (err) {
-    console.error('Erreur de connexion à la base de données', err.message);
+    console.error('❌ Erreur de connexion à la base', err.message);
   } else {
-    console.log('Connecté à la base SQLite');
-    initDb(); // Crée les tables si elles n'existent pas
+    console.log('✅ Connecté à la base SQLite');
+    initDb();
   }
 });
 
-// Initialisation des tables
+// ---------- Initialisation des tables ----------
 function initDb() {
   db.serialize(() => {
     // Utilisateurs
@@ -54,7 +53,7 @@ function initDb() {
         commune TEXT,
         description TEXT,
         geom_type TEXT NOT NULL,
-        coords TEXT NOT NULL,          -- stocké en JSON
+        coords TEXT NOT NULL,
         superficie REAL DEFAULT 0,
         capacite TEXT,
         budget REAL DEFAULT 0,
@@ -73,7 +72,7 @@ function initDb() {
       )
     `);
 
-    // Historique des transitions de workflow
+    // Historique
     db.run(`
       CREATE TABLE IF NOT EXISTS asset_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +88,7 @@ function initDb() {
       )
     `);
 
-    // Événements / Interventions
+    // Événements
     db.run(`
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +105,7 @@ function initDb() {
       )
     `);
 
-    // Projets / Bailleurs
+    // Projets
     db.run(`
       CREATE TABLE IF NOT EXISTS projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,7 +118,7 @@ function initDb() {
       )
     `);
 
-    // Paramètres (fonds de carte, organisation)
+    // Paramètres
     db.run(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -127,15 +126,15 @@ function initDb() {
       )
     `);
 
-    // Référentiel des communes (par île) – stocké en JSON
+    // Référentiel
     db.run(`
       CREATE TABLE IF NOT EXISTS referentiel (
         ile TEXT PRIMARY KEY,
-        communes TEXT   -- JSON array
+        communes TEXT
       )
     `);
 
-    // Fonds de carte (basemaps) – stockés en JSON global
+    // Fonds de carte
     db.run(`
       CREATE TABLE IF NOT EXISTS basemaps (
         id TEXT PRIMARY KEY,
@@ -149,17 +148,16 @@ function initDb() {
       )
     `);
 
-    // Insérer des données par défaut si la base est vide
+    // Données par défaut
     db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
       if (err) return;
       if (row.count === 0) {
-        // Créer un admin par défaut (mot de passe : admin123)
         const hashed = bcrypt.hashSync('admin123', 10);
         db.run(
           "INSERT INTO users (username, password, display_name, role) VALUES (?, ?, ?, ?)",
           ['admin', hashed, 'Administrateur', 'admin']
         );
-        // Créer quelques projets par défaut
+
         const projects = [
           ['Projet CVA', 'PNUD', 2500000, 1800000, 1200, 'En cours'],
           ['Programme Eau', 'Union Européenne', 3200000, 2100000, 800, 'En cours'],
@@ -169,7 +167,6 @@ function initDb() {
         projects.forEach(p => stmt.run(p));
         stmt.finalize();
 
-        // Fonds de carte par défaut
         const basemaps = [
           ['satellite', 'Satellite (ESRI)', 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 'ESRI', 19, '#2d4a2d', '🛰️', 0],
           ['openstreetmap', 'OpenStreetMap', 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', 'OpenStreetMap', 18, '#f0f0e8', '🗺️', 0],
@@ -179,7 +176,6 @@ function initDb() {
         basemaps.forEach(b => bstmt.run(b));
         bstmt.finalize();
 
-        // Paramètre par défaut
         db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('default_basemap', 'satellite')");
         db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('org_name', 'MAPA - Direction Nationale de Stratégie Agricole')");
         db.run("INSERT OR IGNORE INTO settings (key, value) VALUES ('org_subtitle', 'Union des Comores')");
@@ -192,33 +188,48 @@ function initDb() {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Sessions
+// Sessions (MemoryStore pour le dev – à remplacer en production)
 app.use(session({
-  secret: 'siga-secret-key-change-me',
+  secret: 'siga-secret-change-me',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24h
+  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// CORS pour le développement (si nécessaire)
+// CORS pour le dev
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
   next();
 });
 
-// ---------- Routes statiques ----------
-// Servir les fichiers du dossier public (CSS, JS, images)
-app.use(express.static(path.join(__dirname, 'public')));
+// ---------- Détection automatique de l'index.html ----------
+const indexPaths = [
+  path.join(__dirname, 'public', 'index.html'),
+  path.join(__dirname, 'index.html')
+];
+let indexFile = indexPaths.find(p => fs.existsSync(p));
+if (!indexFile) {
+  console.warn('⚠️ index.html introuvable, fallback sur le chemin par défaut');
+  indexFile = path.join(__dirname, 'public', 'index.html');
+}
+console.log(`📄 Fichier index.html servi depuis : ${indexFile}`);
 
-// Route racine : envoyer index.html
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// ---------- Fichiers statiques ----------
+// Si le dossier public existe, on le sert
+if (fs.existsSync(path.join(__dirname, 'public'))) {
+  app.use(express.static(path.join(__dirname, 'public')));
+  console.log('📁 Dossier public/ servi');
+} else {
+  console.warn('⚠️ Dossier public/ absent, seuls les fichiers statiques seront ignorés');
+}
 
 // ---------- Routes API ----------
+// (Toutes les routes API identiques à celles fournies précédemment)
+// Pour des raisons de concision, je les résume ici – veuillez copier l'intégralité du code
+// des routes depuis la réponse précédente. Je les inclus ci-dessous de façon complète.
 
-// --- Helper : utilisateur courant ---
+// Helper : récupérer l'utilisateur courant
 function getCurrentUser(req) {
   if (req.session && req.session.userId) {
     return new Promise((resolve, reject) => {
@@ -235,7 +246,7 @@ function getCurrentUser(req) {
   return Promise.resolve(null);
 }
 
-// --- Middleware d'authentification pour les routes protégées ---
+// Middleware d'authentification
 function requireAuth(req, res, next) {
   if (req.session && req.session.userId) {
     next();
@@ -244,7 +255,9 @@ function requireAuth(req, res, next) {
   }
 }
 
-// --- 1. Session ---
+// -------- Routes ----------
+
+// Session
 app.get('/api/session', async (req, res) => {
   try {
     const user = await getCurrentUser(req);
@@ -258,7 +271,7 @@ app.get('/api/session', async (req, res) => {
   }
 });
 
-// --- 2. Login ---
+// Login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
@@ -285,27 +298,23 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// --- 3. Login visiteur (accès public) ---
+// Visiteur
 app.post('/api/visitor-login', (req, res) => {
-  // Créer une session visiteur sans utilisateur en base
-  req.session.userId = null; // pas d'utilisateur, on le définit comme visiteur
+  req.session.userId = null;
   res.json({ user: { id: null, username: 'visiteur', display_name: 'Visiteur', role: 'visiteur' } });
 });
 
-// --- 4. Logout ---
+// Logout
 app.post('/api/logout', (req, res) => {
   req.session.destroy();
   res.json({ ok: true });
 });
 
-// --- 5. Actifs ---
-// Liste tous les actifs (avec filtres éventuels)
+// -------- Actifs --------
 app.get('/api/assets', requireAuth, (req, res) => {
-  // Si l'utilisateur est visiteur, on ne renvoie que les publiés
   let sql = "SELECT * FROM assets";
   const params = [];
   if (req.session.userId) {
-    // On vérifie le rôle de l'utilisateur
     db.get("SELECT role FROM users WHERE id = ?", [req.session.userId], (err, user) => {
       if (err) return res.status(500).json({ error: err.message });
       if (user && user.role === 'visiteur') {
@@ -313,15 +322,11 @@ app.get('/api/assets', requireAuth, (req, res) => {
       }
       db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        // Décoder les coords JSON
-        rows.forEach(r => {
-          try { r.coords = JSON.parse(r.coords); } catch(e) { r.coords = []; }
-        });
+        rows.forEach(r => { try { r.coords = JSON.parse(r.coords); } catch(e) { r.coords = []; } });
         res.json(rows);
       });
     });
   } else {
-    // Pas de session, on renvoie uniquement les publiés (mode visiteur)
     sql += " WHERE status = 'publie'";
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -331,14 +336,12 @@ app.get('/api/assets', requireAuth, (req, res) => {
   }
 });
 
-// Récupérer un actif par ID
 app.get('/api/assets/:id', requireAuth, (req, res) => {
   const id = req.params.id;
   db.get("SELECT * FROM assets WHERE id = ?", [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Actif non trouvé' });
     try { row.coords = JSON.parse(row.coords); } catch(e) { row.coords = []; }
-    // Récupérer les noms des validateurs
     const techId = row.validated_tech_by;
     const dirId = row.validated_dir_by;
     const extra = {};
@@ -367,7 +370,6 @@ app.get('/api/assets/:id', requireAuth, (req, res) => {
   });
 });
 
-// Historique d'un actif
 app.get('/api/assets/:id/history', requireAuth, (req, res) => {
   const id = req.params.id;
   db.all(
@@ -380,7 +382,6 @@ app.get('/api/assets/:id/history', requireAuth, (req, res) => {
   );
 });
 
-// Créer un actif (demande)
 app.post('/api/assets', requireAuth, async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.status(401).json({ error: 'Non authentifié' });
@@ -388,7 +389,6 @@ app.post('/api/assets', requireAuth, async (req, res) => {
   if (!name || !type || !ile || !geom_type || !coords) {
     return res.status(400).json({ error: 'Champs requis manquants' });
   }
-  // Générer un numéro de demande
   const count = await new Promise((resolve) => {
     db.get("SELECT COUNT(*) as cnt FROM assets", (err, row) => { resolve(row ? row.cnt : 0); });
   });
@@ -402,7 +402,6 @@ app.post('/api/assets', requireAuth, async (req, res) => {
   `;
   db.run(sql, [request_number, name, type, ile, commune, description, geom_type, coordsJson, superficie || 0, capacite || '', budget || 0, status, user.id, user.display_name || user.username], function(err) {
     if (err) return res.status(500).json({ error: err.message });
-    // Enregistrer l'historique
     const assetId = this.lastID;
     db.run(
       "INSERT INTO asset_history (asset_id, from_status, to_status, user_id, user_name) VALUES (?, NULL, ?, ?, ?)",
@@ -412,20 +411,17 @@ app.post('/api/assets', requireAuth, async (req, res) => {
   });
 });
 
-// Mettre à jour un actif (modification par auteur ou admin)
 app.put('/api/assets/:id', requireAuth, async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.status(401).json({ error: 'Non authentifié' });
   const id = req.params.id;
   const { name, type, ile, commune, description, geom_type, coords, superficie, capacite, budget } = req.body;
-  // Vérifier que l'actif existe et que l'utilisateur est autorisé
   db.get("SELECT author_id, status FROM assets WHERE id = ?", [id], (err, asset) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!asset) return res.status(404).json({ error: 'Actif non trouvé' });
     if (user.role !== 'admin' && user.id !== asset.author_id) {
       return res.status(403).json({ error: 'Non autorisé' });
     }
-    // On autorise la modification uniquement si le statut est demande ou collecte
     if (user.role !== 'admin' && !['demande', 'collecte'].includes(asset.status)) {
       return res.status(403).json({ error: 'Modification non autorisée à ce stade du workflow' });
     }
@@ -442,7 +438,6 @@ app.put('/api/assets/:id', requireAuth, async (req, res) => {
   });
 });
 
-// Transition de workflow
 app.post('/api/assets/:id/transition', requireAuth, async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.status(401).json({ error: 'Non authentifié' });
@@ -450,12 +445,10 @@ app.post('/api/assets/:id/transition', requireAuth, async (req, res) => {
   const { to, note } = req.body;
   if (!to) return res.status(400).json({ error: 'Statut cible requis' });
 
-  // Vérifier l'actif
   db.get("SELECT * FROM assets WHERE id = ?", [id], (err, asset) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!asset) return res.status(404).json({ error: 'Actif non trouvé' });
 
-    // Vérifier les droits selon le workflow
     const from = asset.status;
     const isAdmin = user.role === 'admin';
     const isAgent = user.role === 'agent';
@@ -463,7 +456,6 @@ app.post('/api/assets/:id/transition', requireAuth, async (req, res) => {
     const isDir = user.role === 'validateur_dir';
 
     let allowed = false;
-    // Règles (simplifiées) : admin peut tout faire, sinon selon les étapes
     if (isAdmin) {
       allowed = true;
     } else if (from === 'demande' && to === 'collecte' && isAgent) {
@@ -484,7 +476,6 @@ app.post('/api/assets/:id/transition', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Transition non autorisée pour ce rôle' });
     }
 
-    // Effectuer la mise à jour
     const updates = { status: to, updated_at: new Date().toISOString() };
     if (to === 'rejete') {
       updates.rejection_reason = note || 'Rejeté';
@@ -505,7 +496,6 @@ app.post('/api/assets/:id/transition', requireAuth, async (req, res) => {
 
     db.run(`UPDATE assets SET ${setClause} WHERE id = ?`, values, function(err) {
       if (err) return res.status(500).json({ error: err.message });
-      // Enregistrer l'historique
       db.run(
         "INSERT INTO asset_history (asset_id, from_status, to_status, note, user_id, user_name) VALUES (?, ?, ?, ?, ?, ?)",
         [id, from, to, note || null, user.id, user.display_name || user.username]
@@ -515,7 +505,6 @@ app.post('/api/assets/:id/transition', requireAuth, async (req, res) => {
   });
 });
 
-// Supprimer un actif (admin ou auteur si demande/collecte)
 app.delete('/api/assets/:id', requireAuth, async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.status(401).json({ error: 'Non authentifié' });
@@ -533,7 +522,7 @@ app.delete('/api/assets/:id', requireAuth, async (req, res) => {
   });
 });
 
-// --- 6. Événements ---
+// -------- Événements --------
 app.get('/api/events', requireAuth, (req, res) => {
   db.all("SELECT * FROM events ORDER BY created_at DESC", (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -558,7 +547,7 @@ app.post('/api/events', requireAuth, async (req, res) => {
   );
 });
 
-// --- 7. Projets ---
+// -------- Projets --------
 app.get('/api/projects', (req, res) => {
   db.all("SELECT * FROM projects", (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -566,16 +555,9 @@ app.get('/api/projects', (req, res) => {
   });
 });
 
-// --- 8. Statistiques ---
+// -------- Statistiques --------
 app.get('/api/stats', (req, res) => {
-  const stats = {
-    total: 0,
-    pending: 0,
-    rejete: 0,
-    events: 0,
-    superficie: 0,
-    byStatus: {}
-  };
+  const stats = { total: 0, pending: 0, rejete: 0, events: 0, superficie: 0, byStatus: {} };
   db.get("SELECT COUNT(*) as total FROM assets", (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     stats.total = row.total;
@@ -591,7 +573,6 @@ app.get('/api/stats', (req, res) => {
           db.get("SELECT SUM(superficie) as superficie FROM assets", (err5, row5) => {
             if (err5) return res.status(500).json({ error: err5.message });
             stats.superficie = row5.superficie || 0;
-            // Répartition par statut
             db.all("SELECT status, COUNT(*) as count FROM assets GROUP BY status", (err6, rows) => {
               if (err6) return res.status(500).json({ error: err6.message });
               const byStatus = {};
@@ -606,7 +587,7 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// --- 9. Utilisateurs (admin seulement) ---
+// -------- Utilisateurs (admin) --------
 app.get('/api/users', requireAuth, async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user || user.role !== 'admin') {
@@ -662,7 +643,6 @@ app.delete('/api/users/:id', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Accès réservé à l\'administrateur' });
   }
   const id = req.params.id;
-  // Ne pas supprimer l'admin lui-même
   if (parseInt(id) === admin.id) {
     return res.status(400).json({ error: 'Vous ne pouvez pas vous supprimer vous-même' });
   }
@@ -672,9 +652,8 @@ app.delete('/api/users/:id', requireAuth, async (req, res) => {
   });
 });
 
-// --- 10. Référentiel des communes ---
+// -------- Référentiel --------
 app.get('/api/referentiel', (req, res) => {
-  // Pour l'instant, on renvoie des données statiques (on pourrait les stocker en DB)
   const ref = {
     'Ngazidja': ['Moroni', 'Mitsamiouli', 'Mboini', 'Hahaia', 'Ntsoudjini', 'Mboudé', 'Vanambouani', 'Ouellah', 'Itsandra', 'Ndjouoni'],
     'Ndzuwani': ['Mutsamudu', 'Domoni', 'Sima', 'Ouani', 'Mirontsi', 'Mremani', 'Koni-Djoj', 'Koni-Ngani', 'Ongodjou', 'Jimilimé'],
@@ -683,7 +662,7 @@ app.get('/api/referentiel', (req, res) => {
   res.json(ref);
 });
 
-// --- 11. Fonds de carte ---
+// -------- Fonds de carte --------
 app.get('/api/basemaps', (req, res) => {
   db.all("SELECT * FROM basemaps", (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -691,7 +670,7 @@ app.get('/api/basemaps', (req, res) => {
   });
 });
 
-// --- 12. Paramètres ---
+// -------- Paramètres --------
 app.get('/api/settings', (req, res) => {
   db.all("SELECT key, value FROM settings", (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -715,14 +694,13 @@ app.put('/api/settings', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-// --- 13. Export des données ---
+// -------- Export --------
 app.get('/api/export/:format', requireAuth, (req, res) => {
   const format = req.params.format;
   db.all("SELECT * FROM assets", (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     rows.forEach(r => { try { r.coords = JSON.parse(r.coords); } catch(e) { r.coords = []; } });
     if (format === 'geojson') {
-      // Convertir en FeatureCollection
       const features = rows.map(a => {
         let geometry = null;
         if (a.geom_type === 'point') {
@@ -758,7 +736,6 @@ app.get('/api/export/:format', requireAuth, (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename=assets.geojson`);
       res.send(JSON.stringify(fc));
     } else if (format === 'csv') {
-      // Générer un CSV
       const header = 'id,request_number,name,type,ile,commune,description,geom_type,superficie,capacite,budget,status,author_name,created_at,published_at\n';
       const lines = rows.map(a => {
         const coordsStr = a.coords ? JSON.stringify(a.coords) : '';
@@ -769,7 +746,6 @@ app.get('/api/export/:format', requireAuth, (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename=assets.csv`);
       res.send(csv);
     } else {
-      // JSON natif
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', `attachment; filename=assets.json`);
       res.send(JSON.stringify(rows));
@@ -777,7 +753,7 @@ app.get('/api/export/:format', requireAuth, (req, res) => {
   });
 });
 
-// --- 14. Import de données ---
+// -------- Import --------
 app.post('/api/import', requireAuth, async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) return res.status(401).json({ error: 'Non authentifié' });
@@ -795,7 +771,6 @@ app.post('/api/import', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Format GeoJSON non reconnu' });
       }
     } else if (type === 'csv') {
-      // Parser CSV simple (première ligne = en-têtes)
       const lines = data.split('\n').filter(line => line.trim() !== '');
       if (lines.length < 2) return res.status(400).json({ error: 'CSV vide' });
       const headers = lines[0].split(',').map(h => h.trim());
@@ -805,7 +780,6 @@ app.post('/api/import', requireAuth, async (req, res) => {
         headers.forEach((h, i) => { obj[h] = cols[i] || ''; });
         return obj;
       });
-      // Convertir chaque ligne en feature (point par défaut)
       features = rows.map(row => {
         const lat = parseFloat(row.lat || row.latitude || 0);
         const lon = parseFloat(row.lon || row.longitude || 0);
@@ -838,12 +812,11 @@ app.post('/api/import', requireAuth, async (req, res) => {
     const superficie = parseFloat(props.superficie) || 0;
     const capacite = props.capacite || '';
     const budget = parseFloat(props.budget) || 0;
-    // Générer un numéro de demande
     const cnt = await new Promise((resolve) => {
       db.get("SELECT COUNT(*) as cnt FROM assets", (err, row) => { resolve(row ? row.cnt : 0); });
     });
     const request_number = `FALIKI-${String(cnt + 1 + count).padStart(4, '0')}`;
-    const status = 'en_validation_technique'; // mis en validation technique par défaut pour admin
+    const status = 'en_validation_technique';
     const sql = `
       INSERT INTO assets 
       (request_number, name, type, ile, commune, description, geom_type, coords, superficie, capacite, budget, status, author_id, author_name)
@@ -871,20 +844,31 @@ app.post('/api/import', requireAuth, async (req, res) => {
   res.json({ count });
 });
 
-// ---------- Fallback SPA (toutes les autres routes) ----------
-// Cette route doit être placée APRÈS toutes les routes API et après les routes statiques
+// ---------- Fallback SPA (après les routes API) ----------
+// Cette route renvoie index.html pour toute requête non-API,
+// permettant au routeur côté client de gérer la navigation.
+
 app.get('*', (req, res) => {
-  // Ne pas capturer les requêtes qui commencent par /api (elles ont déjà été traitées)
-  // Mais pour sécurité, on vérifie
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  res.sendFile(path.join(__dirname, 'index.html'));
+  // Vérifier si indexFile existe, sinon renvoyer une erreur 500
+  if (!fs.existsSync(indexFile)) {
+    return res.status(500).send('Fichier index.html introuvable');
+  }
+  res.sendFile(indexFile);
 });
 
 // ---------- Démarrage du serveur ----------
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur FALIKI ZA DIMA lancé sur http://localhost:${PORT}`);
-  console.log(`📁 Base de données : ${DB_FILE}`);
-  console.log(`🔑 Identifiant admin par défaut : admin / admin123`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 FALIKI ZA DIMA lancé sur http://0.0.0.0:${PORT}`);
+  console.log(`📁 Base : ${DB_FILE}`);
+  console.log(`🔑 Admin par défaut : admin / admin123`);
+});
+
+// Gestion propre de l'arrêt
+process.on('SIGTERM', () => {
+  console.log('🛑 Arrêt du serveur...');
+  db.close();
+  process.exit(0);
 });
