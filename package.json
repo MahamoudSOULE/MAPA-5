@@ -1,0 +1,16 @@
+{
+  "name": "faliki-za-dima",
+  "version": "2.0.0",
+  "description": "SIGA — Système d'Information Géographique Agricole de l'Union des Comores",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "multer": "^2.2.0"
+  }
+}

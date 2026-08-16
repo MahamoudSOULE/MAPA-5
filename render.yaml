@@ -1,0 +1,27 @@
+# ============================================================
+#  FALIKI ZA DIMA — Render Blueprint
+#  Déploie automatiquement la plateforme comme Web Service.
+#  - Données partagées via SQLite (better-sqlite3)
+#  - Aucun localStorage : tout passe par l'API backend
+#  Usage : connecter ce dépôt à Render, il lit render.yaml
+# ============================================================
+
+services:
+  - type: web
+    name: faliki-za-dima
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/session
+    envVars:
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: faliki-data
+      mountPath: /data
+      sizeGB: 1

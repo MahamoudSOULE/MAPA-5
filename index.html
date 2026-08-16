@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a472a">
+<meta name="description" content="FALIKI ZA DIMA — SIGA : Système d'Information Géographique Agricole de l'Union des Comores. Suivi de bout en bout des actifs agricoles : demande, collecte terrain, validation, publication, suivi-évaluation.">
+<title>FALIKI ZA DIMA | SIGA — Union des Comores</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="toast-container" id="toastContainer"></div>
+<svg style="display:none">
+  <symbol id="ico-cocotier" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 22V12m0 0c-3-4-7-3-9-1 2-4 6-5 9-4 3-1 7 0 9 4-2-2-6-3-9 1zm0 0c0-6-2-9-4-10 3 1 4 4 4 4s1-3 4-4c-2 1-4 4-4 10z"/></symbol>
+  <symbol id="ico-chart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 16v-5m4 5V8m4 8v-3m4 3V6"/></symbol>
+  <symbol id="ico-carte" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M1 6l8-4 6 3 8-4v16l-8 4-6-3-8 4z"/></symbol>
+  <symbol id="ico-workflow" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 5h6a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm6 14h-6a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2zm9-14H9m9 0a3 3 0 1 1 0 6H9m9-6a3 3 0 1 0 0-6m0 6v14m0 0a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></symbol>
+  <symbol id="ico-hangar" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 22V10l9-7 9 7v12M3 10h18M9 22v-8h6v8"/></symbol>
+  <symbol id="ico-semis" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 22V12m0 0c-2-3-1-6 2-8 1 3 0 6-2 8zm-5 4c0-3 1-5 3-6m7 6c0-3-1-5-3-6M2 22h20"/></symbol>
+  <symbol id="ico-recolte" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 2v6m-4 4c0-3 2-5 4-5s4 2 4 5-2 5-4 5-4-2-4-5zm-2 8l-2 6m12-6l2 6M8 22h8"/></symbol>
+  <symbol id="ico-validation" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 2l3 3 3-1 1 3 3 1-1 3 3 3-3 3 1 3-3 1-1 3-3-1-3 3-3-1-1-3-3-1 1-3-3-3 3-3-1-3 3-1 1-3z"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="ico-import" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="ico-admin" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="ico-forage" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 22V10m0 0l-4-2m4 2l4-2m-4 2V4m-6 4h12M6 22h12"/></symbol>
+  <symbol id="ico-barrage" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 22V10l8-6 8 6v12M4 14h16M8 22v-6m8 6v-6"/></symbol>
+  <symbol id="ico-usine" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 22V10l6-3v3l6-3v3l4-2v12M2 22h20M9 14h.01M15 14h.01M9 18h.01M15 18h.01"/></symbol>
+  <symbol id="ico-piste" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M2 18l4-8 4 4 4-6 4 4 4-6"/></symbol>
+  <symbol id="ico-riz" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 22V10m0 0c-2-3-5-4-7-3 2-2 5-1 7 2 2-3 5-4 7-2-2-1-5 0-7 3zm0 0V6m-2 4c-1-2-3-2-4-1 1-1 3 0 4 1zm8 1c-1-2-3-2-4-1 1-1 3 0 4 1z"/></symbol>
+  <symbol id="ico-basfond" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M2 16c2-2 5-2 8 0s7 0 10-2c1 2 2 3 2 5a4 4 0 0 1-8 0 4 4 0 0 1-8 0c0-2 1-3 2-5zM6 12l4-4 4 4 4-4"/></symbol>
+  <symbol id="ico-parc" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 22V12a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M2 22h20"/></symbol>
+  <symbol id="ico-etang" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M2 14c2-2 5-3 8-1s7 1 10-1c1 2 2 4 2 6a6 6 0 0 1-12 0 6 6 0 0 1-8 0c0-2 1-4 2-6zM6 10c0-2 1.5-4 3-4s3 2 3 4"/></symbol>
+  <symbol id="ico-rebois" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 22V12m0 0c-3-3-6-2-8 0 2-3 5-4 8-2 3-2 6-1 8 2-2-2-5-3-8 2zm0 0V8m-2 4c-1-2-2.5-2-3.5-1 1-1 2.5 0 3.5 1zm7 1c-1-2-2.5-2-3.5-1 1-1 2.5 0 3.5 1zM2 22h20"/></symbol>
+</svg>
+
+<!-- ================= LOGIN ================= -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card-glass">
+    <div class="login-logo-wrap">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#ico-cocotier"/></svg>
+    </div>
+    <h1 class="login-title">FALIKI ZA DIMA</h1>
+    <p class="login-subtitle">Système d'Information Géographique Agricole</p>
+    <p class="login-country">🇰🇲 Union des Comores — Direction Nationale de Stratégie Agricole</p>
+
+    <button class="btn-glass" onclick="api.visitorLogin()">🌍 Consulter la carte des actifs</button>
+    <button class="btn-glass-outline" onclick="showLoginForm()">🔐 Espace Agent / Administration</button>
+
+    <div id="loginForm" style="display:none;margin-top:16px;">
+      <div class="login-divider">authentification</div>
+      <div class="login-error" id="loginError"></div>
+      <div class="role-chips" id="roleChips">
+        <button class="role-chip active" data-role="agent">🤝 Agent terrain</button>
+        <button class="role-chip" data-role="validateur_tech">🔬 Valid. technique</button>
+        <button class="role-chip" data-role="validateur_dir">🏛️ Direction</button>
+        <button class="role-chip" data-role="admin">⚙️ Administrateur</button>
+      </div>
+      <input type="text" class="input-glass" id="loginUser" placeholder="Identifiant" autocomplete="username">
+      <input type="password" class="input-glass" id="loginPass" placeholder="Mot de passe" autocomplete="current-password">
+      <button class="btn-glass" onclick="api.login()">Se connecter</button>
+      <p class="login-hint">Accès réservé au personnel autorisé.</p>
+    </div>
+    <p class="login-hint">Consultation publique limitée à la carte des actifs publiés.</p>
+  </div>
+</div>
+
+<!-- ================= VISITEUR : CARTE SEULEMENT ================= -->
+<div class="visitor-mode" id="visitorMode">
+  <div class="visitor-header">
+    <div class="visitor-brand">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.6"><use href="#ico-cocotier"/></svg>
+      <div>
+        <div class="brand-text">🌴 FALIKI <span>ZA DIMA</span></div>
+        <div class="brand-tag" style="color:rgba(255,255,255,0.5)">Carte publique des actifs agricoles</div>
+      </div>
+    </div>
+    <button class="visitor-login-btn" onclick="showVisitorLogin()">🔐 Espace agents</button>
+  </div>
+  <div class="visitor-map">
+    <div id="visitorMap"></div>
+    <div class="visitor-info" id="visitorInfo">🌐 <strong>Mode public</strong> — seuls les actifs <strong>publiés et validés</strong> sont affichés.</div>
+    <div class="visitor-legend" id="visitorLegend"></div>
+    <div id="coordBarV" class="coord-bar coord-bar-visitor">
+      <span class="coord-item" id="coordUtmV">UTM 38S: --</span>
+      <span class="coord-item" id="coordLatLonV">Lat: -- | Lon: --</span>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APPLICATION ================= -->
+<div class="main-layout" id="mainLayout">
+  <header class="app-header">
+    <div class="app-header-left">
+      <button class="menu-toggle" onclick="ui.toggleSidebar()">☰</button>
+      <div>
+        <div class="brand-text">🌴 FALIKI <span>ZA DIMA</span></div>
+        <div class="brand-tag">SIGA — Comores</div>
+      </div>
+    </div>
+    <div class="app-header-right">
+      <button class="icon-btn" onclick="ui.toggleTheme()">🌓</button>
+      <div class="user-pill">
+        <div class="user-avatar" id="headerAvatar">V</div>
+        <div>
+          <div class="user-name" id="headerUserName">—</div>
+          <div class="user-role" id="headerUserRole">—</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="content-area">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-nav" id="sidebarNav"></div>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="user-avatar" id="sidebarAvatar">V</div>
+          <div><div class="sidebar-user-name" id="sidebarUserName">—</div><div class="sidebar-user-role" id="sidebarUserRole">—</div></div>
+        </div>
+        <button class="logout-btn" onclick="api.logout()">↪ Déconnexion</button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="ui.toggleSidebar()"></div>
+
+    <main class="main-content" id="mainContent">
+      <div class="page" id="page-dashboard"></div>
+      <div class="page" id="page-carte">
+        <div class="page-header"><h1>Carte Nationale des Actifs</h1><p>Géoréférencement des infrastructures agricoles — fond de carte paramétrable, recherche et coordonnées UTM</p></div>
+        <div class="filter-bar">
+          <div class="map-search-wrap">
+            <input type="text" id="mapSearch" placeholder="🔍 Rechercher un actif (nom, réf, commune...)" autocomplete="off" oninput="mapctrl.search(this.value)">
+            <div id="mapSearchResults" class="map-search-results"></div>
+          </div>
+          <select id="mapFilterType" onchange="mapctrl.render()"><option value="">Toutes filières</option></select>
+          <select id="mapFilterIle" onchange="mapctrl.render()"><option value="">Toutes îles</option><option>Ngazidja</option><option>Ndzuwani</option><option>Mwali</option></select>
+          <select id="mapFilterStatus" onchange="mapctrl.render()"><option value="">Tous statuts</option></select>
+          <button class="btn btn-primary btn-sm" onclick="mapctrl.center()">🎯 Archipel</button>
+          <button class="btn btn-secondary btn-sm" onclick="mapctrl.zoomIle('Ngazidja')">🏝️ Ngazidja</button>
+          <button class="btn btn-secondary btn-sm" onclick="mapctrl.zoomIle('Ndzuwani')">🏝️ Ndzuwani</button>
+          <button class="btn btn-secondary btn-sm" onclick="mapctrl.zoomIle('Mwali')">🏝️ Mwali</button>
+        </div>
+        <div class="map-shell">
+          <div id="appMap"></div>
+          <button class="basemap-btn" onclick="mapctrl.toggleBasemapPanel()">🗺️ Fonds de carte</button>
+          <div class="basemap-panel" id="basemapPanel">
+            <h4>🗺️ FONDS DE CARTE</h4>
+            <div class="basemap-grid" id="basemapGrid"></div>
+          </div>
+          <div id="coordBar" class="coord-bar">
+            <span class="coord-item" id="coordUtm">UTM 38S: --</span>
+            <span class="coord-item" id="coordLatLon">Lat: -- | Lon: --</span>
+            <button class="coord-copy" onclick="mapctrl.copyCoords()" title="Copier les coordonnées">⧉</button>
+          </div>
+        </div>
+        <div class="legend" id="mapLegend"></div>
+      </div>
+      <div class="page" id="page-workflow"></div>
+      <div class="page" id="page-actifs"></div>
+      <div class="page" id="page-saisie"></div>
+      <div class="page" id="page-validation"></div>
+      <div class="page" id="page-interventions"></div>
+      <div class="page" id="page-import"></div>
+      <div class="page" id="page-admin"></div>
+    </main>
+  </div>
+</div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/vendor/jspdf/jspdf.umd.min.js"></script>
+<script src="/vendor/shpjs/shp.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
